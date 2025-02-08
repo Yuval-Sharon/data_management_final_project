@@ -3,7 +3,6 @@ import copy
 from db_utils import DbConnection
 import re
 from typing import Tuple
-# starting from abstract class
 import re
 from typing import Tuple, List, Set, Dict
 from db_utils import DbConnection
