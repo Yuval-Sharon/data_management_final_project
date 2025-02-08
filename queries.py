@@ -1,15 +1,4 @@
-"""
-A model to include the queries for the user and the Q* results.
-Each query should have the following attributes:
-  - query description
-  - user query (empty at first)
-  - query results (empty at first)
-  - Q* query
-  - Q* results 
 
-Reminder that our data model is :
-# don't use subqueries at all
-"""
 import copy
 from db_utils import DbConnection
 import re
