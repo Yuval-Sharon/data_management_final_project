@@ -6,6 +6,9 @@ from typing import Tuple
 import re
 from typing import Tuple, List, Set, Dict
 from db_utils import DbConnection
+import sqlparse
+from sqlparse.sql import Where, Comparison, Identifier, Function, Operation
+
 
 class Query:
     def __init__(self, query_description, user_query, q_star_query):
@@ -260,18 +263,165 @@ class Query:
             return False, hint_message
         else:
             return True, ""
+        
+        
+    def _extract_where_clause(self, query: str) -> str:
+        """
+        Extract the WHERE clause from the query.
+        """
+        where_index = query.lower().find("where")
+        if where_index == -1:
+            return ""
+        return query[where_index + len("where"):].strip()
+        
+    def _build_where_syntax_tree(self, where_clause: str):
+        """
+        Build a syntax tree for the WHERE clause.
+        """
+        parsed = sqlparse.parse(where_clause)[0]
+        
+        def build_tree(token):
+            if isinstance(token, Comparison):
+                # Basic comparison (e.g., s.price < 5)
+                return ("COMPARISON", str(token))
+            elif isinstance(token, Operation):
+                # Operation (e.g., A AND B)
+                op = str(token.token_next_by_type(sqlparse.sql.Token.T_OPERATOR))
+                left = token.token_first()
+                right = token.token_last()
+                return (op, build_tree(left), build_tree(right))
+            elif isinstance(token, sqlparse.sql.Where):
+                # Recursively process the Where clause
+                _, sub_token = token.token_next_by_type(sqlparse.sql.Token)  # Skip the WHERE keyword itself
+                return build_tree(sub_token)
+
+            elif isinstance(token, sqlparse.sql.Identifier):
+                return ("IDENTIFIER", str(token))
+            elif isinstance(token, sqlparse.sql.Function):
+                return ("FUNCTION", str(token))
+            else:
+                # Handle other token types as needed (e.g., IdentifierList, Parenthesis)
+                return ("TOKEN", str(token))
+
+        return build_tree(parsed)
+    
+    def _map_aliases_where_tree(self, tree):
+        """
+        Update WHERE tree with alias mapping
+        """
+        if isinstance(tree, tuple):
+            node_type = tree[0]
+            if node_type == 'COMPARISON':
+                comparison_str = tree[1]
+                # Use regex to find columns with table aliases in the comparison string
+                pattern = re.compile(r'(\w+\.\w+)')
+                matches = pattern.findall(comparison_str)
+                for match in matches:
+                    table_alias, column_name = match.split('.')
+
+                    if table_alias in self.aliases_mapping:
+                        mapped_alias = self.aliases_mapping[table_alias]
+                        new_column_str = f"{mapped_alias}.{column_name}"
+                        comparison_str = comparison_str.replace(match, new_column_str)  # Replace in the string
+                return (node_type, comparison_str)
+            else:
+                # Recursively process the children of the node
+                new_children = [self._map_aliases_where_tree(child) for child in tree[1:]]
+                return (tree[0], *new_children)
+        return tree
+    
+    def _compare_where_trees(self, tree1, tree2):
+        """
+        Compare two syntax trees recursively.
+
+        Return a list of differences found. The differences are represented as a list of tuples,
+        where each tuple contains the path to the differing node in tree1 and tree2, and the differing node information.
+        """
+        differences = []
+
+        def compare_nodes(node1, node2, path1=(), path2=()):
+            """
+            Compare two nodes and their children.
+            """
+            if type(node1) != type(node2):
+                differences.append((path1, path2, "Node types differ", node1, node2))
+                return  # Stop further comparison if node types differ
+
+            if isinstance(node1, tuple):  # For operator nodes
+                if node1[0] != node2[0]:
+                    differences.append((path1, path2, "Operators differ", node1[0], node2[0]))
+                    return
+
+                # Compare children
+                for i in range(1, len(node1)):
+                    compare_nodes(node1[i], node2[i], path1 + (f"child{i}",), path2 + (f"child{i}",))
+            else:  # For leaf nodes (COMPARISON, IDENTIFIER, FUNCTION, TOKEN)
+                if node1 != node2:
+                    differences.append((path1, path2, "Leaf nodes differ", node1, node2))
+
+        compare_nodes(tree1, tree2)
+        return differences
+
+    def _construct_where_hint(self, diffs):
+        """
+        Construct hint from list of differences
+        """
+        hint_message = ""
+        for path1, path2, message, node1, node2 in diffs:
+            if "Leaf nodes differ" in message:
+                # Example logic: different predicate
+                hint_message += f"The WHERE clause might be incorrect. Consider modifying `{node1}` to `{node2}`. "
+            elif "Operators differ" in message:
+                # Example logic: different operator
+                hint_message += f"The operator might be incorrect. Consider changing `{node1}` to `{node2}`. "
+            else:
+                hint_message += "There is a difference in where clause."
+
+        return hint_message
+
+    def hint_for_repair_where_clause(self) -> Tuple[bool, str]:
+        """
+        Provide hints for the WHERE clause by comparing syntax trees.
+        """
+        # 1. Get WHERE clauses from both queries.
+        user_where_clause = self._extract_where_clause(self.user_query)
+        q_star_where_clause = self._extract_where_clause(self.q_star_query)
+
+        # 2. Build syntax trees.
+        user_tree = self._build_where_syntax_tree(user_where_clause)
+        q_star_tree = self._build_where_syntax_tree(q_star_where_clause)
+
+        # 3. Add Alias
+        self._map_aliases_between_queries()
+        mapped_user_tree = self._map_aliases_where_tree(user_tree)
+
+        # 4. Compare the trees and generate a diff.
+        diffs = self._compare_where_trees(mapped_user_tree, q_star_tree)
+
+        # 5. Construct hint from the diff.
+        hint = self._construct_where_hint(diffs)
+
+        if hint:
+            return False, hint
+        else:
+            return True, ""
 
     def check_query_and_provide_hints(self):
-        """
-        Excluding the repair from part
-        """
         valid, hint = self.hint_for_repair_from_clause()
         if not valid:
             return False, hint
+        
+        # TODO: currently this is disabled
+        # valid, hint = self.hint_for_repair_where_clause()
+        # if not valid:
+        #     return False, hint
+        
         valid, hint = self.hint_for_repair_select_clause()
         if not valid:
             return False, hint
         return True, ""
+    
+    
 
 
 class Query1(Query):
@@ -280,7 +430,7 @@ class Query1(Query):
         q_star_query = "SELECT s.bar FROM Serves s JOIN Likes l ON s.beer = l.beer WHERE l.drinker = 'Alice'"
         if user_query is None or user_query == "":
             # set example for **Wrong** query
-            user_query = "SELECT s.bar FROM Serves s"
+            user_query = "SELECT s.bar FROM Serves s WHERE s.beer = 'Alice'"
         super().__init__(desc, user_query=user_query, q_star_query=q_star_query)
 
 class Query2(Query):
