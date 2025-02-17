@@ -69,7 +69,6 @@ class Query:
         # This regex will match JOIN followed by a table name and an optional alias.
         join_pattern = re.compile(r'\bJOIN\s+([^\s,]+)(?:\s+(?:AS\s+)?(\w+))?', re.IGNORECASE)
         join_matches = join_pattern.findall(query)
-        print(f"join_matches: {join_matches}")
         for table, alias in join_matches:
             alias = alias if alias != '' else None
             tables.append((table, alias))
@@ -411,71 +410,84 @@ class Query:
         if not valid:
             return False, hint
         
-        # TODO: currently this is disabled
-        # valid, hint = self.hint_for_repair_where_clause()
-        # if not valid:
-        #     return False, hint
+        valid, hint = self.hint_for_repair_where_clause()
+        if not valid:
+            return False, hint
         
         valid, hint = self.hint_for_repair_select_clause()
         if not valid:
             return False, hint
         return True, ""
     
-    
-
-
 class Query1(Query):
     def __init__(self, user_query):
         desc = "Query 1: Find all the bars that serves beer that Alice likes."
-        q_star_query = "SELECT s.bar FROM Serves s JOIN Likes l ON s.beer = l.beer WHERE l.drinker = 'Alice'"
+        # Converted q_star_query with implicit join
+        q_star_query = (
+            "SELECT s.bar FROM Serves s, Likes l "
+            "WHERE s.beer = l.beer AND l.drinker = 'Alice'"
+        )
         if user_query is None or user_query == "":
-            # set example for **Wrong** query
+            # set example for **Wrong** query (remains unchanged as it had no explicit join)
             user_query = "SELECT s.bar FROM Serves s WHERE s.beer = 'Alice'"
         super().__init__(desc, user_query=user_query, q_star_query=q_star_query)
+
 
 class Query2(Query):
     def __init__(self, user_query):
         desc = "Query 2: find all of the bars that alice or bob frequents."
+        # No join used here, so no changes needed.
         q_star_query = "SELECT f.bar FROM Frequents f WHERE f.drinker IN ('Alice', 'Bob')"
         if user_query is None or user_query == "":
             # set example for **Wrong** query
             user_query = "SELECT f.bar FROM Frequents f"
         super().__init__(desc, user_query=user_query, q_star_query=q_star_query)
 
+
 class Query3(Query):
     def __init__(self, user_query):
         desc = "Query 7: Find all bars that serve at least two distinct beers priced under 5."
+        # Converted q_star_query with implicit join
         q_star_query = (
-            "SELECT DISTINCT s1.bar FROM Serves s1 "
-            "JOIN Serves s2 ON s1.bar = s2.bar AND s1.beer <> s2.beer "
-            "WHERE s1.price < 5 AND s2.price < 5"
+            "SELECT DISTINCT s1.bar FROM Serves s1, Serves s2 "
+            "WHERE s1.bar = s2.bar AND s1.beer <> s2.beer "
+            "AND s1.price < 5 AND s2.price < 5"
         )
         if user_query is None or user_query == "":
-            # set example for **Wrong** query
+            # set example for **Wrong** query (remains unchanged as it had no explicit join)
             user_query = "SELECT DISTINCT s1.bar FROM Serves s1"
         super().__init__(desc, user_query=user_query, q_star_query=q_star_query)
 
+
 class Query4(Query):
     def __init__(self, user_query):
-        desc = ("Query 8: Find all beers that are liked by a drinker and are served in a bar "
-                "that the same drinker frequents.")
+        desc = (
+            "Query 8: Find all beers that are liked by a drinker and are served in a bar "
+            "that the same drinker frequents."
+        )
+        # Converted q_star_query with implicit joins
         q_star_query = (
-            "SELECT DISTINCT L.beer FROM Likes L "
-            "JOIN Frequents F ON L.drinker = F.drinker "
-            "JOIN Serves S ON F.bar = S.bar AND S.beer = L.beer"
+            "SELECT DISTINCT L.beer FROM Likes L, Frequents F, Serves S "
+            "WHERE L.drinker = F.drinker AND F.bar = S.bar AND S.beer = L.beer"
         )
         if user_query is None or user_query == "":
-            # set example for **Wrong** query
-            print("setting default query for query 4")
-            user_query = "SELECT DISTINCT L.beer FROM Likes L JOIN Frequents F ON L.drinker = F.drinker"
+            # Converted user_query with implicit join
+            user_query = (
+                "SELECT DISTINCT L.beer FROM Likes L, Frequents F "
+                "WHERE L.drinker = F.drinker"
+            )
         super().__init__(desc, user_query=user_query, q_star_query=q_star_query)
+
 
 class Query5(Query):
     def __init__(self, user_query):
-        desc = "Query 5: Find all of the beers that are served in a price under 5. Show the bar, the beer name and the price."
-        # Correct query selects both bar and beer
+        desc = (
+            "Query 5: Find all of the beers that are served in a price under 5. "
+            "Show the bar, the beer name and the price."
+        )
+        # q_star_query remains unchanged since no join is used.
         q_star_query = "SELECT s.bar, s.beer, s.price FROM Serves s WHERE s.price < 5"
         if user_query is None or user_query == "":
-            # Wrong query selects only the bar, omitting the beer field.
+            # Wrong query remains unchanged (omits beer field)
             user_query = "SELECT s.bar, s.price FROM Serves s WHERE s.price < 5"
         super().__init__(desc, user_query=user_query, q_star_query=q_star_query)
