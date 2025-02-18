@@ -115,6 +115,28 @@ class Query:
                 result.append(item)
         return result
     
+    @staticmethod
+    def normalize_query(query: str) -> str:
+        """
+        Normalize a SQL query by formatting it consistently.
+        This example uses sqlparse.format to:
+        - Set keywords and identifiers to lower-case.
+        - Remove comments.
+        - Reindent the query.
+        - Remove extra whitespace.
+        Adjust keyword_case or other options if you prefer a different style.
+        """
+        # Use sqlparse to format the query
+        formatted = sqlparse.format(query,
+                                    keyword_case='lower',
+                                    identifier_case='lower',
+                                    strip_comments=True,
+                                    reindent=True,
+                                    indent_width=2)
+        # Replace multiple spaces with a single space and trim
+        normalized = re.sub(r'\s+', ' ', formatted)
+        return normalized.strip()
+    
     def _check_from_clause(self) -> Tuple[List[str], List[str]]:
         user_tables = self._get_table_names(self.user_query, user_query=True)
         q_star_tables = self._get_table_names(self.q_star_query, user_query=False)
@@ -361,22 +383,57 @@ class Query:
         compare_nodes(tree1, tree2)
         return differences
 
+    # def _construct_where_hint(self, diffs):
+    #     """
+    #     Construct hint from list of differences
+    #     """
+    #     hint_message = ""
+    #     for path1, path2, message, node1, node2 in diffs:
+    #         if "Leaf nodes differ" in message:
+    #             # Example logic: different predicate
+    #             hint_message += f"The WHERE clause might be incorrect. Consider modifying `{node1}` to `{node2}`. "
+    #         elif "Operators differ" in message:
+    #             # Example logic: different operator
+    #             hint_message += f"The operator might be incorrect. Consider changing `{node1}` to `{node2}`. "
+    #         else:
+    #             hint_message += "There is a difference in where clause."
+
+    #     return hint_message
+    
     def _construct_where_hint(self, diffs):
         """
-        Construct hint from list of differences
+        Construct a subtle hint from a list of differences in the WHERE clause.
         """
-        hint_message = ""
+        hint_messages = []
         for path1, path2, message, node1, node2 in diffs:
             if "Leaf nodes differ" in message:
-                # Example logic: different predicate
-                hint_message += f"The WHERE clause might be incorrect. Consider modifying `{node1}` to `{node2}`. "
+                # Hint that the predicate values might need a closer look.
+                hint_messages.append(
+                    "The filtering condition seems almost right; perhaps a quick review of the predicate values could help."
+                )
             elif "Operators differ" in message:
-                # Example logic: different operator
-                hint_message += f"The operator might be incorrect. Consider changing `{node1}` to `{node2}`. "
+                # Hint more gently about the operator.
+                hint_messages.append(
+                    "The logical operator appears nearly correct; you might want to check if it aligns with your intended comparison."
+                )
+            elif "Column names differ" in message:
+                # New case: column names discrepancy.
+                hint_messages.append(
+                    "There seems to be a slight variation in the column references; a brief verification could be useful."
+                )
+            elif "Function differences" in message:
+                # New case: differences in function usage.
+                hint_messages.append(
+                    "The function used in the condition seems a bit off; consider confirming it matches your expectations."
+                )
             else:
-                hint_message += "There is a difference in where clause."
+                # Fallback for any other type of difference.
+                hint_messages.append(
+                    "There appears to be a minor divergence in the condition; a subtle review might help identify the discrepancy."
+                )
 
-        return hint_message
+        return " ".join(hint_messages)
+
 
     def hint_for_repair_where_clause(self) -> Tuple[bool, str]:
         """
@@ -406,6 +463,13 @@ class Query:
             return True, ""
 
     def check_query_and_provide_hints(self):
+        # normalize the queries
+        self.user_query = self.normalize_query(self.user_query)
+        self.q_star_query = self.normalize_query(self.q_star_query)
+        
+        print(f"User Query: {self.user_query}")
+        print(f"Q* Query: {self.q_star_query}")
+        
         valid, hint = self.hint_for_repair_from_clause()
         if not valid:
             return False, hint

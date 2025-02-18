@@ -53,4 +53,4 @@ with gr.Blocks() as demo:
                                     inputs=input_text, 
                                     outputs=[output, user_query_results, q_star_results])
 
-demo.launch()
+demo.launch(share=True)
