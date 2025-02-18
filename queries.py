@@ -467,8 +467,8 @@ class Query:
         self.user_query = self.normalize_query(self.user_query)
         self.q_star_query = self.normalize_query(self.q_star_query)
         
-        print(f"User Query: {self.user_query}")
-        print(f"Q* Query: {self.q_star_query}")
+        # print(f"User Query: {self.user_query}")
+        # print(f"Q* Query: {self.q_star_query}")
         
         valid, hint = self.hint_for_repair_from_clause()
         if not valid:
