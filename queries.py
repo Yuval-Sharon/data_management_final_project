@@ -631,7 +631,13 @@ class Query:
                         values_str = values_str[1:-1].strip()
                     values = [val.strip() for val in values_str.split(",")]
                     print("[NORMALIZE] Column:", column, "Values extracted:", values)
-                    comparisons = [("COMPARISON", f"{column} = {val}") for val in values]
+                    comparisons = []
+                    for val in values:
+                        # Ensure the left side is the expected format
+                        if column > val:
+                            comparisons.append(("COMPARISON", f"{val} = {column}"))
+                        else:
+                            comparisons.append(("COMPARISON", f"{column} = {val}"))
                     print("[NORMALIZE] Generated comparisons:", comparisons)
                     if len(comparisons) == 1:
                         result = comparisons[0]
