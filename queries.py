@@ -661,6 +661,8 @@ class Query:
                         # Ensure the left side is the expected format
                         if left.strip() > right.strip():
                             token_str = f"{right.strip()} = {left.strip()}"
+                        else:
+                            token_str = f"{left.strip()} = {right.strip()}"
                     else:
                         # remove spaces
                         token_str = token_str.replace(" ", "")
