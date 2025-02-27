@@ -780,7 +780,7 @@ class Query2(Query):
 
 class Query3(Query):
     def __init__(self, user_query):
-        desc = "Query 7: Find all bars that serve at least two distinct beers priced under 5."
+        desc = "Query 3: Find all bars that serve at least two distinct beers priced under 5."
         # Converted q_star_query with implicit join
         q_star_query = (
             "SELECT DISTINCT s1.bar FROM Serves s1, Serves s2 "
@@ -796,7 +796,7 @@ class Query3(Query):
 class Query4(Query):
     def __init__(self, user_query):
         desc = (
-            "Query 8: Find all beers that are liked by a drinker and are served in a bar "
+            "Query 4: Find all beers that are liked by a drinker and are served in a bar "
             "that the same drinker frequents."
         )
         # Converted q_star_query with implicit joins
