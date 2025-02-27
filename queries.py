@@ -649,6 +649,12 @@ class Query:
                 # NEW: If it looks like a simple comparison (e.g. contains "="), convert to COMPARISON.
                 if "=" in token_str or "<" in token_str or ">" in token_str:
                     print("[NORMALIZE] Converting simple TOKEN to COMPARISON:", token_str)
+                    # Split the token_str by the '=' sign
+                    if "=" in token_str:
+                        left, right = token_str.split("=")
+                        # Ensure the left side is the expected format
+                        if left.strip() > right.strip():
+                            token_str = f"{right.strip()} = {left.strip()}"
                     return ("COMPARISON", token_str)
                 else:
                     print("[NORMALIZE] TOKEN node unchanged:", tree)
@@ -702,7 +708,9 @@ class Query:
         mapped_user_tree = self._map_aliases_where_tree(user_tree)
 
         # 4. Normalize both trees to ignore order differences in AND-connected predicates.
+        print("Normalizing user tree")
         normalized_user_tree = Query.normalize_where_tree(mapped_user_tree)
+        print("Normalizing q* tree")
         normalized_q_star_tree = Query.normalize_where_tree(q_star_tree)
 
         # 5. Compare the normalized trees.
